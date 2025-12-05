@@ -1,0 +1,11 @@
+[package]
+name = "crab-grab"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+arboard = "3.6.1"
+eframe = {version =  "0.33.2", features = ["wgpu"]}
+global-hotkey = "0.7.0"
+image = "0.25.9"
+xcap = "0.7.1"

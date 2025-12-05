@@ -1,0 +1,18 @@
+version: 2
+updates:
+  # Maintain Rust dependencies
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Optional: Group updates to reduce PR noise
+    groups:
+      dependencies:
+        patterns:
+          - "*"
+
+  # Maintain GitHub Actions (CI/CD)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
