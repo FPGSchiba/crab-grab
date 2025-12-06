@@ -1,6 +1,6 @@
 [package]
 name = "crab-grab"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 description = "A screen capture tool with global hotkey support."
 repository = "https://github.com/FPGSchiba/crab-grab"
@@ -31,7 +31,7 @@ windows = { version = "0.62.2", features = ["Win32_UI_WindowsAndMessaging", "Win
 [package.metadata.bundle]
 name = "CrabGrab"
 identifier = "ch.schiba.crabgrab"
-version = "0.1.2"
+version = "0.1.3"
 copyright = "Copyright 2025 FPG Schiba"
 category = "Productivity"
 short_description = "A fast screenshot utility."

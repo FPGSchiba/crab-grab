@@ -153,7 +153,7 @@ impl CrabGrabApp {
         ctx.send_viewport_cmd(egui::ViewportCommand::Transparent(true));
         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(10000.0, 10000.0)));
         ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(vec2(0.0, 0.0)));
-        self.config.save()
+        self.config.save();
     }
 
     /// Helper to handle system tray events (Right click menu, Left click toggle)
@@ -163,7 +163,10 @@ impl CrabGrabApp {
         while let Ok(event) = MenuEvent::receiver().try_recv() {
             println!("MENU CLICK: {:?}", event.id);
             match event.id {
-                _ if event.id == self.quit_id => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+                _ if event.id == self.quit_id => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    self.config.save();
+                },
                 _ if event.id == self.settings_id => self.handle_open_settings(ctx),
                 _ if event.id == self.capture_id => self.handle_begin_capture(ctx),
                 _ => println!("Warning: Unhandled Menu ID: {:?}", event.id),
@@ -225,13 +228,11 @@ impl CrabGrabApp {
         while let Ok(event) = receiver.try_recv() {
             if event.state == HotKeyState::Pressed {
                 match event.id {
-                    // FIX: Allow triggering capture from Idle OR Config
                     _ if event.id == self.config.snap_hotkey.id() => {
                         if matches!(self.state, AppState::Idle | AppState::Config) {
                             self.handle_begin_capture(ctx);
                         }
                     }
-                    // ... keep other hotkeys as they are ...
                     _ if event.id == self.cancel_hotkey.id() => {
                         if matches!(self.state, AppState::Snapping) {
                             // ... your cancel logic ...
@@ -609,7 +610,7 @@ impl eframe::App for CrabGrabApp {
                     ui.heading("Experience");
                     ui.checkbox(&mut self.config.custom_cursor, "Use CrabGrab Cursor");
                     ui.checkbox(&mut self.config.play_sound, "Play Camera Shutter Sound");
-                    
+
                     if ui.checkbox(&mut self.config.run_on_startup, "Run on Startup").changed() {
                         utils::set_autostart(self.config.run_on_startup);
                         self.config.save();
