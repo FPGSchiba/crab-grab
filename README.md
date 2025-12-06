@@ -76,7 +76,7 @@ CrabGrab is built with a modern Rust stack:
 * **Audio:** `rodio` for sound effects.
 * **State:** `serde_json` for configuration persistence.
 
-## 🗺️ Roadmap
+## Roadmap
 
 * [x] Basic Snapping & Clipboard
 * [x] Settings UI & Hotkey Recorder
@@ -85,6 +85,3 @@ CrabGrab is built with a modern Rust stack:
 * [ ] Image Editor (Draw arrows/blur)
 * [ ] OCR (Text recognition)
 
-## 📄 License
-
-Distributed under the MIT License. See `LICENSE` for more information.
