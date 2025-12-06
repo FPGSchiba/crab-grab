@@ -37,6 +37,7 @@
 
             <Directory Id='$(var.PlatformProgramFilesFolder)' Name='PFiles'>
                 <Directory Id='APPLICATIONFOLDER' Name='CrabGrab'>
+
                     <Component Id='License' Guid='*'>
                         <File Id='LicenseFile' DiskId='1' Source='LICENSE' KeyPath='yes'/>
                     </Component>
@@ -60,7 +61,7 @@
                                     Name="CrabGrab"
                                     Description="Lightning fast screenshot tool"
                                     WorkingDirectory="APPLICATIONFOLDER"
-                                    Icon="ProductICO"
+                                    Icon="CrabGrab.exe"
                                     Advertise="yes"/>
                             </File>
                         </Component>
@@ -91,7 +92,10 @@
             Absent='disallow'>
 
             <ComponentRef Id='License'/>
-            <ComponentRef Id='binary0'/> <ComponentRef Id='CleanupShortcut'/> <Feature
+            <ComponentRef Id='binary0'/>
+            <ComponentRef Id='CleanupShortcut'/>
+
+            <Feature
                 Id='Environment'
                 Title='PATH Environment Variable'
                 Description='Add the install location to PATH.'
@@ -103,8 +107,8 @@
 
         <SetProperty Id='ARPINSTALLLOCATION' Value='[APPLICATIONFOLDER]' After='CostFinalize'/>
 
-        <Icon Id='ProductICO' SourceFile='wix\Product.ico'/>
-        <Property Id='ARPPRODUCTICON' Value='ProductICO' />
+        <Icon Id='CrabGrab.exe' SourceFile='wix\Product.ico'/>
+        <Property Id='ARPPRODUCTICON' Value='CrabGrab.exe' />
 
         <UI>
             <UIRef Id='WixUI_FeatureTree'/>
