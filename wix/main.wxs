@@ -87,43 +87,37 @@
         <Directory Id='TARGETDIR' Name='SourceDir'>
             <Directory Id='$(var.PlatformProgramFilesFolder)' Name='PFiles'>
                 <Directory Id='APPLICATIONFOLDER' Name='crab-grab'>
-                    <!--
-                      Disabling the license sidecar file in the installer is a two step process:
-
-                      1. Comment out or remove the `Component` tag along with its contents.
-                      2. Comment out or remove the `ComponentRef` tag with the "License" Id
-                         attribute value further down in this file.
-                    -->
                     <Component Id='License' Guid='*'>
-                        <File Id='LicenseFile'
-                            DiskId='1'
-                            Source='LICENSE'
-                            KeyPath='yes'/>
+                        <File Id='LicenseFile' DiskId='1' Source='LICENSE' KeyPath='yes'/>
                     </Component>
-                    
+
                     <Directory Id='Bin' Name='bin'>
                         <Component Id='Path' Guid='5C7547F3-A915-48D5-A611-0E639B75C309' KeyPath='yes'>
-                            <Environment
-                                Id='PATH'
-                                Name='PATH'
-                                Value='[Bin]'
-                                Permanent='no'
-                                Part='last'
-                                Action='set'
-                                System='yes'/>
+                            <Environment Id='PATH' Name='PATH' Value='[Bin]' Permanent='no' Part='last' Action='set' System='yes'/>
                         </Component>
                         <Component Id='binary0' Guid='*'>
-                            <File
-                                Id='exe0'
-                                Name='crab-grab.exe'
-                                DiskId='1'
-                                Source='$(var.CargoTargetBinDir)\crab-grab.exe'
-                                KeyPath='yes'/>
+                            <File Id='exe0' Name='crab-grab.exe' DiskId='1' Source='$(var.CargoTargetBinDir)\crab-grab.exe' KeyPath='yes'/>
                         </Component>
                     </Directory>
                 </Directory>
             </Directory>
+
+            <Directory Id="ProgramMenuFolder">
+                <Directory Id="ApplicationProgramsFolder" Name="CrabGrab"/>
+            </Directory>
         </Directory>
+
+        <DirectoryRef Id="ApplicationProgramsFolder">
+            <Component Id="ApplicationShortcut" Guid="*">
+                <Shortcut Id="ApplicationStartMenuShortcut"
+                          Name="CrabGrab"
+                          Description="Lightning fast screenshot tool"
+                          Target="[#exe0]"
+                          WorkingDirectory="APPLICATIONFOLDER"/>
+                <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall"/>
+                <RegistryValue Root="HKCU" Key="Software\CrabGrab" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+            </Component>
+        </DirectoryRef>
 
         <Feature
             Id='Binaries'
@@ -150,6 +144,10 @@
                 Absent='allow'>
                 <ComponentRef Id='Path'/>
             </Feature>
+
+            <Feature Id="Main" Title="CrabGrab" Description="..." Level="1">
+                <ComponentRef Id="ApplicationShortcut" />
+            </Feature>
         </Feature>
 
         <SetProperty Id='ARPINSTALLLOCATION' Value='[APPLICATIONFOLDER]' After='CostFinalize'/>
@@ -161,8 +159,8 @@
           The product icon is the graphic that appears in the Add/Remove
           Programs control panel for the application.
         -->
-        <!--<Icon Id='ProductICO' SourceFile='wix\Product.ico'/>-->
-        <!--<Property Id='ARPPRODUCTICON' Value='ProductICO' />-->
+        <Icon Id='ProductICO' SourceFile='wix\Product.ico'/>
+        <Property Id='ARPPRODUCTICON' Value='ProductICO' />
 
         
         <!--

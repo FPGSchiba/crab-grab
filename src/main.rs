@@ -14,6 +14,17 @@ mod audio;
 use windows::Win32::UI::WindowsAndMessaging::{GetMessageW, TranslateMessage, DispatchMessageW, MSG};
 
 fn main() -> Result<(), eframe::Error> {
+    // Only run this on Windows
+    if std::env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" {
+        let mut res = winres::WindowsResource::new();
+
+        // Point this to your icon file
+        // Ensure "wix/Product.ico" exists relative to Cargo.toml!
+        res.set_icon("wix/Product.ico");
+
+        res.compile().unwrap();
+    }
+
     // 1. Setup Common Menu Items
     let quit_id = "quit".to_string();
     let settings_id = "settings".to_string();
