@@ -2,10 +2,28 @@
 name = "crab-grab"
 version = "0.1.0"
 edition = "2024"
+description = "A screen capture tool with global hotkey support."
+repository = "https://github.com/FPGSchiba/crab-grab"
+license-file = "LICENSE"
+authors = ["FPG Schiba <craftzockerlp@gmail.com>"]
 
 [dependencies]
 arboard = "3.6.1"
 eframe = {version =  "0.33.2", features = ["wgpu"]}
 global-hotkey = "0.7.0"
 image = "0.25.9"
+tray-icon = "0.21.2"
 xcap = "0.7.1"
+rayon = "1.8"
+rfd = "0.16.0"
+chrono = "0.4.42"
+rodio = "0.19.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dirs = "6.0.0"
+egui = "0.33.2"
+auto-launch = "0.5.0"
+
+# Platform specific dependencies
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62.2", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }

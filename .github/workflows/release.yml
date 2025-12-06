@@ -1,0 +1,61 @@
+name: Cross-Platform Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  # --- WINDOWS JOB ---
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with: { toolchain: stable, profile: minimal, override: true }
+      - run: cargo install cargo-wix
+      - run: cargo wix --nocapture
+      - name: Upload Artifact
+        uses: softprops/action-gh-release@v1
+        with:
+          files: target/wix/*.msi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # --- LINUX JOB ---
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with: { toolchain: stable, profile: minimal, override: true }
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libx11-dev libasound2-dev
+      - run: cargo install cargo-deb
+      - run: cargo deb
+      - name: Upload Artifact
+        uses: softprops/action-gh-release@v1
+        with:
+          files: target/debian/*.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # --- MACOS JOB ---
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with: { toolchain: stable, profile: minimal, override: true }
+      - run: cargo install cargo-bundle
+      - run: cargo bundle --release
+      - name: Zip Bundle
+        run: zip -r crab-grab-macos.zip target/release/bundle/osx/CrabGrab.app
+      - name: Upload Artifact
+        uses: softprops/action-gh-release@v1
+        with:
+          files: crab-grab-macos.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
