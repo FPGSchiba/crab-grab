@@ -102,7 +102,7 @@ fn init_tray_platform(quit_id: String, settings_id: String, capture_id: String) 
         unsafe {
             let mut msg = MSG::default();
             while GetMessageW(&mut msg, None, 0, 0).as_bool() {
-                TranslateMessage(&msg);
+                let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
         }

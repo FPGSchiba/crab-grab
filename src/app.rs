@@ -5,7 +5,7 @@ use eframe::egui;
 use eframe::egui::vec2;
 use global_hotkey::{GlobalHotKeyManager, GlobalHotKeyEvent, HotKeyState};
 use global_hotkey::hotkey::{Code, HotKey, Modifiers};
-use image::{load, RgbaImage};
+use image::{RgbaImage};
 use tray_icon::menu::{MenuEvent, MenuId};
 use tray_icon::{TrayIcon};
 use std::sync::mpsc::{channel, Receiver};
@@ -609,9 +609,7 @@ impl eframe::App for CrabGrabApp {
                     ui.heading("Experience");
                     ui.checkbox(&mut self.config.custom_cursor, "Use CrabGrab Cursor");
                     ui.checkbox(&mut self.config.play_sound, "Play Camera Shutter Sound");
-
-                    let prev_auto_save = self.config.run_on_startup; // Assuming you add this to config
-
+                    
                     if ui.checkbox(&mut self.config.run_on_startup, "Run on Startup").changed() {
                         utils::set_autostart(self.config.run_on_startup);
                         self.config.save();
