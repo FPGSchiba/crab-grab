@@ -1,6 +1,6 @@
 #![windows_subsystem = "windows"]
 
-use eframe::{egui, NativeOptions, Renderer};
+use eframe::{egui, egui_wgpu, NativeOptions, Renderer};
 use eframe::egui_wgpu::{WgpuConfiguration, WgpuSetup, WgpuSetupCreateNew, wgpu};
 use std::sync::Arc;
 use tray_icon::{TrayIcon, TrayIconBuilder, menu::{Menu, MenuItem, MenuId}};
@@ -51,6 +51,10 @@ fn main() -> Result<(), eframe::Error> {
                 }
             }),
             ..Default::default()
+        }),
+        on_surface_error: Arc::new(|err| {
+            log::error!("WGPU surface error: {:?}", err);
+            egui_wgpu::SurfaceErrorAction::RecreateSurface
         }),
         ..Default::default()
     };
