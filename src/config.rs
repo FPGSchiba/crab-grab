@@ -67,45 +67,45 @@ impl Default for AppConfig {
 impl AppConfig {
     pub fn load() -> Self {
         if let Some(config_dir) = dirs::config_dir() {
-            let config_path = config_dir.join("crab_config.json");
+            let config_path = config_dir.join("crab-grab").join("crab_config.json");
             return if let Ok(data) = std::fs::read_to_string(config_path) {
                 if let Ok(mut config) = serde_json::from_str::<AppConfig>(&data) {
                     let snap_hotkey = savable_to_hotkey(&config.snap_hotkey_code, config.snap_hotkey_mods);
                     config.snap_hotkey = snap_hotkey;
                     config
                 } else {
-                    eprintln!("Failed to parse config file, using default config.");
+                    log::error!("Failed to parse config file, using default config.");
                     AppConfig::default()
                 }
             } else {
-                eprintln!("Config file not found, using default config.");
+                log::error!("Config file not found, using default config.");
                 AppConfig::default()
             }
         } else {
-            eprintln!("Could not determine config directory, using default config.");
+            log::error!("Could not determine config directory, using default config.");
         }
         AppConfig::default()
     }
 
     pub fn save(&mut self) {
         if let Some(config_dir) = dirs::config_dir() {
-            let config_path = config_dir.join("crab_config.json");
+            let config_path = config_dir.join("crab-grab").join("crab_config.json");
             let (code_str, mods_bits) = hotkey_to_savable(&self.snap_hotkey);
             self.snap_hotkey_code = code_str;
             self.snap_hotkey_mods = mods_bits;
             if let Ok(json) = serde_json::to_string_pretty(&self) {
                 if let Err(e) = std::fs::create_dir_all(&config_dir) {
-                    eprintln!("Failed to create config directory: {}", e);
+                    log::error!("Failed to create config directory: {}", e);
                     return;
                 }
                 if let Err(e) = std::fs::write(config_path, json) {
-                    eprintln!("Failed to write config file: {}", e);
+                    log::error!("Failed to write config file: {}", e);
                 }
             } else {
-                eprintln!("Failed to serialize config.");
+                log::error!("Failed to serialize config.");
             }
         } else {
-            eprintln!("Could not determine config directory, config not saved.");
+            log::error!("Could not determine config directory, config not saved.");
         }
     }
 }

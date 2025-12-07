@@ -16,6 +16,10 @@ mod audio;
 use windows::Win32::UI::WindowsAndMessaging::{GetMessageW, TranslateMessage, DispatchMessageW, MSG};
 
 fn main() -> Result<(), eframe::Error> {
+    let config = utils::get_logging_config();
+    let _handle = log4rs::init_config(config).unwrap();
+    log::info!("Starting Crab Grab...");
+
     // 1. Setup Common Menu Items
     let quit_id = "quit".to_string();
     let settings_id = "settings".to_string();

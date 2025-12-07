@@ -6,6 +6,10 @@ use global_hotkey::hotkey::{HotKey, Modifiers};
 use image::RgbaImage;
 use tray_icon::Icon;
 use auto_launch::AutoLaunchBuilder;
+use log4rs::append::console::ConsoleAppender;
+use log4rs::append::file::FileAppender;
+use log4rs::config::{Appender, Config, Root};
+use log4rs::encode::pattern::PatternEncoder;
 
 const MAX_TEXTURE_SIZE: u32 = 2048;
 
@@ -114,14 +118,14 @@ pub fn save_image_to_disk(image: &RgbaImage, dir_path: &str) {
     let time_now = chrono::Local::now();
     let timestamp = time_now.format("%Y-%m-%d_%H-%M-%S").to_string();
     let path = Path::new(dir_path).join(format!("screenshot_{}.png", timestamp));
-    println!("Saving image to: {}", dir_path);
+    log::info!("Saving image to: {}", dir_path);
     if let Err(e) = std::fs::create_dir_all(dir_path) {
-        eprintln!("Failed to create directory {}: {}", dir_path, e);
+        log::error!("Failed to create directory {}: {}", dir_path, e);
         return;
     }
     match image.save(&path) {
-        Ok(_) => println!("Image saved successfully to {:?}", path),
-        Err(e) => eprintln!("Failed to save image to {:?}: {}", path, e),
+        Ok(_) => log::info!("Image saved successfully to {:?}", path),
+        Err(e) => log::error!("Failed to save image to {:?}: {}", path, e),
     }
 }
 
@@ -169,12 +173,38 @@ pub fn set_autostart(enable: bool) {
             if enable {
                 if auto.is_enabled().unwrap_or(false) { return; }
                 let _ = auto.enable();
-                println!("Autostart ENABLED");
+                log::debug!("Autostart ENABLED");
             } else {
                 if !auto.is_enabled().unwrap_or(false) { return; }
                 let _ = auto.disable();
-                println!("Autostart DISABLED");
+                log::debug!("Autostart DISABLED");
             }
         }
     }
+}
+
+pub fn get_logging_config() -> Config {
+    let log_file_path = dirs::config_dir().unwrap().join("crab-grab").join("crab-grab.log");
+
+    // Define a console appender
+    let stdout = ConsoleAppender::builder()
+        .encoder(Box::new(PatternEncoder::new("{d} - {l} - {m}\n")))
+        .build();
+
+    let file = FileAppender::builder()
+        .encoder(Box::new(PatternEncoder::new("{d} - {l} - {m}\n")))
+        .build(log_file_path)
+        .unwrap();
+
+    // Build the logging configuration
+    Config::builder()
+        .appender(Appender::builder().build("stdout", Box::new(stdout)))
+        .appender(Appender::builder().build("file", Box::new(file)))
+        .build(
+            Root::builder()
+                .appender("stdout")
+                .appender("file")
+                .build(log::LevelFilter::Info),
+        )
+        .unwrap()
 }

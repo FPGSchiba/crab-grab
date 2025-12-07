@@ -70,8 +70,8 @@ impl CrabGrabApp {
 
         for hk in [loaded_config.snap_hotkey, cancel_hotkey, settings_hotkey] {
             match hotkey_manager.register(hk) {
-                Ok(_) => println!("Hotkey registered: {:?}", hk),
-                Err(e) => eprintln!("Failed to register hotkey {:?}: {:?}", hk, e),
+                Ok(_) => log::info!("Hotkey registered: {:?}", hk),
+                Err(e) => log::error!("Failed to register hotkey {:?}: {:?}", hk, e),
             }
         }
 
@@ -100,7 +100,7 @@ impl CrabGrabApp {
                     egui::TextureOptions::NEAREST // Use NEAREST if it's pixel art!
                 ))
             } else {
-                eprintln!("Failed to load cursor image");
+                log::error!("Failed to load cursor image");
                 None
             }
         };
@@ -130,7 +130,7 @@ impl CrabGrabApp {
     }
 
     fn handle_open_settings(&mut self, ctx: &egui::Context) {
-        println!("Opening Settings Window...");
+        log::debug!("Opening Settings Window...");
 
         self.state = AppState::Config;
 
@@ -144,7 +144,7 @@ impl CrabGrabApp {
     }
 
     fn handle_close_settings(&mut self, ctx: &egui::Context) {
-        println!("Closing Settings Window...");
+        log::debug!("Closing Settings Window...");
 
         self.state = AppState::Idle;
 
@@ -161,7 +161,7 @@ impl CrabGrabApp {
         // 1. Drain Menu Events
         // (Menus don't usually spam, but it's good practice to limit them too)
         while let Ok(event) = MenuEvent::receiver().try_recv() {
-            println!("MENU CLICK: {:?}", event.id);
+            log::debug!("MENU CLICK: {:?}", event.id);
             match event.id {
                 _ if event.id == self.quit_id => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -169,7 +169,7 @@ impl CrabGrabApp {
                 },
                 _ if event.id == self.settings_id => self.handle_open_settings(ctx),
                 _ if event.id == self.capture_id => self.handle_begin_capture(ctx),
-                _ => println!("Warning: Unhandled Menu ID: {:?}", event.id),
+                _ => log::warn!("Warning: Unhandled Menu ID: {:?}", event.id),
             }
         }
     }
@@ -186,7 +186,7 @@ impl CrabGrabApp {
             }
         }
 
-        println!("Starting Capture from state: {:?}", self.previous_state);
+        log::debug!("Starting Capture from state: {:?}", self.previous_state);
         // 3. Prepare Window Style (Transparent Overlay)
         ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(false));
         ctx.send_viewport_cmd(egui::ViewportCommand::Transparent(true));
@@ -218,7 +218,7 @@ impl CrabGrabApp {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
                 ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
             }
-            Err(e) => eprintln!("Capture failed: {}", e),
+            Err(e) => log::error!("Capture failed: {}", e),
         }
     }
 
@@ -235,10 +235,13 @@ impl CrabGrabApp {
                     }
                     _ if event.id == self.cancel_hotkey.id() => {
                         if matches!(self.state, AppState::Snapping) {
-                            // ... your cancel logic ...
                             self.state = AppState::Idle;
-                            // ... reset data ...
+                            self.start_pos = None;
+                            self.current_pos = None;
+                            self.raw_image = None;
+                            self.tiles = None;
                             ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(10000.0, 10000.0)));
+                            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(vec2(0.0, 0.0)));
                         }
                     }
                     _ if event.id == self.settings_hotkey.id() => {
@@ -312,16 +315,16 @@ impl CrabGrabApp {
 
             if let Ok(mut clipboard) = Clipboard::new() {
                 if let Err(e) = clipboard.set_image(image_data) {
-                    eprintln!("Failed to copy to clipboard: {}", e);
+                    log::error!("Failed to copy to clipboard: {}", e);
                 } else {
-                    println!("Copied to clipboard successfully.");
+                    log::debug!("Copied to clipboard successfully.");
                 }
             }
         });
 
         // 4. INSTANT UI RESTORE
         // We don't wait for the save/clipboard. We hide the window immediately.
-        println!("Capture Finished. Restoring to: {:?}", self.previous_state);
+        log::debug!("Capture Finished. Restoring to: {:?}", self.previous_state);
 
         match self.previous_state {
             AppState::Config => {
@@ -369,7 +372,7 @@ impl CrabGrabApp {
                     match key {
                         $( egui::Key::$egui => Code::$gh, )*
                         _ => {
-                            println!("Unsupported key: {:?}", key);
+                            log::warn!("Unsupported key: {:?}", key);
                             return None;
                         }
                     }
@@ -392,14 +395,14 @@ impl CrabGrabApp {
     }
 
     fn update_hotkey(&mut self, new_hotkey: HotKey) {
-        println!("Updating hotkey to: {:?}", new_hotkey);
+        log::debug!("Updating hotkey to: {:?}", new_hotkey);
 
         // 1. Unregister the OLD hotkey (self.config.snap_hotkey)
         let result = self._hotkey_manager.unregister(self.config.snap_hotkey);
         // Hint: self.hotkey_manager.unregister(self.config.snap_hotkey)
 
         if let Err(e) = result {
-            eprintln!("Failed to unregister old hotkey {:?}: {:?}", self.config.snap_hotkey, e);
+            log::error!("Failed to unregister old hotkey {:?}: {:?}", self.config.snap_hotkey, e);
             return;
         }
 
@@ -407,10 +410,10 @@ impl CrabGrabApp {
         // Hint: self.hotkey_manager.register(new_hotkey)
         let result = self._hotkey_manager.register(new_hotkey);
         if let Err(e) = result {
-            eprintln!("Failed to register new hotkey {:?}: {:?}", new_hotkey, e);
+            log::error!("Failed to register new hotkey {:?}: {:?}", new_hotkey, e);
             // Attempt to restore the previous hotkey; log any failure but don't panic.
             if let Err(e2) = self._hotkey_manager.register(self.config.snap_hotkey) {
-                eprintln!("Failed to restore previous hotkey {:?}: {:?}", self.config.snap_hotkey, e2);
+                log::error!("Failed to restore previous hotkey {:?}: {:?}", self.config.snap_hotkey, e2);
             }
             return;
         }
@@ -420,7 +423,7 @@ impl CrabGrabApp {
     }
 
     fn open_file_picker(&mut self) {
-        println!("Spawning file picker thread...");
+        log::debug!("Spawning file picker thread...");
         // TASK: Spawn a thread to pick a folder.
         // 1. Create a channel (tx, rx).
         let (tx, rx) = channel();
@@ -442,13 +445,13 @@ impl CrabGrabApp {
         if let Some(rx) = &self.file_picker_receiver {
             match rx.try_recv() {
                 Ok(new_path) => {
-                    println!("File picker returned path: {}", new_path);
+                    log::debug!("File picker returned path: {}", new_path);
                     self.config.save_directory = new_path;
                     self.file_picker_receiver = None;
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
                 Err(e) => {
-                    eprintln!("File picker channel error: {:?}", e);
+                    log::error!("File picker channel error: {:?}", e);
                     self.file_picker_receiver = None;
                 }
             }
