@@ -1,6 +1,6 @@
 use std::env;
 use std::path::Path;
-use eframe::egui::{ColorImage, Context, TextureHandle, TextureOptions};
+use eframe::egui::{Context, TextureHandle, TextureOptions};
 use egui::{vec2};
 use global_hotkey::hotkey::{HotKey, Modifiers};
 use image::RgbaImage;
@@ -10,75 +10,73 @@ use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
+use crate::capture::{MonitorData};
 
-const MAX_TEXTURE_SIZE: u32 = 2048;
+const MAX_TILE_SIZE: u32 = 2048; // Safe limit for almost any GPU
 
-/// Splits a large image into vertical tiles that fit within GPU limits (max 2048px width).
-/// Returns a vector of (X_Offset, TextureHandle).
-pub fn load_image_as_tiles(ctx: &Context, image: &RgbaImage) -> Vec<(f32, TextureHandle)> {
-    let (total_width, height) = image.dimensions();
-
+pub fn load_image_as_tiles(ctx: &Context, image: &RgbaImage) -> Vec<(f32, f32, TextureHandle)> {
+    let (total_width, total_height) = image.dimensions();
     let mut tiles = Vec::new();
-    let mut current_x = 0;
 
-    while current_x < total_width {
-        // Determine the width of this specific tile
-        let tile_width = std::cmp::min(MAX_TEXTURE_SIZE, total_width - current_x);
+    let mut current_y = 0;
+    while current_y < total_height {
+        let tile_height = std::cmp::min(MAX_TILE_SIZE, total_height - current_y);
 
-        // Crop the strip from the original image
-        let sub_image = image::imageops::crop_imm(
-            image,
-            current_x,
-            0,
-            tile_width,
-            height
-        ).to_image();
+        let mut current_x = 0;
+        while current_x < total_width {
+            let tile_width = std::cmp::min(MAX_TILE_SIZE, total_width - current_x);
 
-        // Convert to egui ColorImage
-        let pixels = sub_image.as_flat_samples();
-        let color_image = ColorImage::from_rgba_unmultiplied(
-            [tile_width as usize, height as usize],
-            pixels.as_slice(),
-        );
+            // Crop the specific rectangle (Grid cell)
+            let sub_image = image::imageops::crop_imm(
+                image,
+                current_x,
+                current_y,
+                tile_width,
+                tile_height
+            ).to_image();
 
-        // Upload to GPU
-        let name = format!("screenshot_tile_{}", current_x);
-        let handle = ctx.load_texture(&name, color_image, TextureOptions::NEAREST);
+            let pixels = sub_image.as_flat_samples();
+            let color_image = egui::ColorImage::from_rgba_unmultiplied(
+                [tile_width as usize, tile_height as usize],
+                pixels.as_slice(),
+            );
 
-        // Store the X offset so we know where to draw it later
-        tiles.push((current_x as f32, handle));
+            // Unique name for caching
+            let name = format!("tile_{}_{}_{}x{}", current_x, current_y, tile_width, tile_height);
+            let handle = ctx.load_texture(&name, color_image, TextureOptions::NEAREST);
 
-        current_x += tile_width;
+            // Store X AND Y offsets
+            tiles.push((current_x as f32, current_y as f32, handle));
+
+            current_x += tile_width;
+        }
+        current_y += tile_height;
     }
 
     tiles
 }
 
-/// Takes multiple images (with X, Y positions) and turns them into GPU tiles.
-/// Returns: Vec<(Global_X_Position, Global_Y_Position, TextureHandle)>
 pub fn load_screens_as_tiles(
-    ctx: &Context,
-    captures: &[(i32, i32, RgbaImage)]
-) -> Vec<(f32, f32, TextureHandle)> {
-    // 1. Loop through each image.
-    let mut result_tiles: Vec<(f32, f32, TextureHandle)> = Vec::new();
-    for (img_x, img_y, image) in captures {
-        // 2. For each image, perform the tiling logic (splitting into 2048px strips).
-        let tiles = load_image_as_tiles(ctx, image);
+    ctx: &egui::Context,
+    captures: &[MonitorData]
+) -> Vec<(f32, f32, egui::TextureHandle)> {
+    let mut result_tiles = Vec::new();
 
-        // For each tile, we need to adjust its global position.
-        for (tile_offset_x, texture) in tiles {
-            let global_x = *img_x as f32 + tile_offset_x;
-            let global_y = *img_y as f32;
+    for mon in captures {
+        // 1. Tile this specific monitor's image
+        let local_tiles = load_image_as_tiles(ctx, &mon.image);
 
-            // Store the global position and texture handle.
-            // Note: You would typically collect these into a result vector.
-            // 3. IMPORTANT: The tile's X position is: Image_X + Current_Strip_Offset.
-            result_tiles.push((global_x, global_y, texture.clone()));
+        // 2. Adjust offsets to Global Space
+        for (tile_x, tile_y, texture) in local_tiles {
+            // Global X = Monitor X + Tile X Offset
+            let global_x = mon.x as f32 + tile_x;
+            // Global Y = Monitor Y + Tile Y Offset
+            let global_y = mon.y as f32 + tile_y;
+
+            result_tiles.push((global_x, global_y, texture));
         }
     }
 
-    // 4. Return one big flat list of all tiles from all monitors.
     result_tiles
 }
 

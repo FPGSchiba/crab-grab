@@ -199,7 +199,7 @@ impl CrabGrabApp {
             Ok(data) => {
                 self.raw_image = Some(data.full_image);
                 self.virtual_origin = data.origin;
-                let tiles = utils::load_screens_as_tiles(ctx, &data.screenshots);
+                let tiles = utils::load_screens_as_tiles(ctx, &data.monitors);
                 self.tiles = Some(tiles);
 
                 if let Some(img) = &self.raw_image {

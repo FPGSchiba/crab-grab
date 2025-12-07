@@ -52,11 +52,18 @@ fn main() -> Result<(), eframe::Error> {
             },
 
             device_descriptor: Arc::new(|adapter| {
-                // Log what we actually got
-                log::info!("Selected Backend: {:?}", adapter.get_info().backend);
-
+                // 1. Start with defaults
                 let mut limits = wgpu::Limits::default();
-                limits.max_texture_dimension_2d = 8192;
+
+                // 2. Query the actual hardware limits of the adapter
+                let best_limits = adapter.limits();
+
+                // 3. Set our limit to the HARDWARE MAX (or at least 16k)
+                // We use .min() to ensure we don't ask for more than the card has,
+                // but we aim for 16384 to support triple-4K setups.
+                limits.max_texture_dimension_2d = best_limits.max_texture_dimension_2d;
+
+                log::info!("Requesting Texture Size Limit: {}", limits.max_texture_dimension_2d);
 
                 wgpu::DeviceDescriptor {
                     label: Some("CrabGrab Device"),
