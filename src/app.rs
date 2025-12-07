@@ -32,15 +32,13 @@ pub struct CrabGrabApp {
     cancel_hotkey: HotKey,
     settings_hotkey: HotKey,
 
-    // Logic Data
     raw_image: Option<RgbaImage>,
-
-    // Visual Data (Matches your utils return type)
-    tiles: Option<Vec<(f32, f32, egui::TextureHandle)>>,
-
+    tiles: Option<Vec<(egui::Rect, egui::TextureHandle)>>,
+    monitor_layout: Vec<egui::Rect>,
     start_pos: Option<egui::Pos2>,
     current_pos: Option<egui::Pos2>,
-    virtual_origin: (i32, i32),
+    virtual_origin: (f32, f32),
+    physical_origin: (i32, i32),
 
     quit_id: MenuId,
     settings_id: MenuId,
@@ -105,14 +103,36 @@ impl CrabGrabApp {
             }
         };
 
+        let (virtual_origin, _) = if let Ok(data) = crate::capture::capture_all_screens() {
+            log::info!("Warmup: Detected Origin at ({}, {}) with Scale {}",
+            data.logical_origin.0, data.logical_origin.1, data.origin_scale_factor);
+
+            // 2. Move the hidden window to that monitor immediately.
+            // This forces Egui/Windows to handshake on the DPI (1.5) right now.
+            cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                egui::pos2(data.logical_origin.0, data.logical_origin.1)
+            ));
+
+            // 3. Set a tiny non-zero size so the OS actually processes the move
+            cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                egui::vec2(1.0, 1.0)
+            ));
+
+            (data.logical_origin, data.origin_scale_factor)
+        } else {
+            ((0.0, 0.0), 1.0)
+        };
+
         Self {
             raw_image: None,
             tiles: None,
+            monitor_layout: Vec::new(),
             start_pos: None,
             current_pos: None,
             state: AppState::Idle,
             _hotkey_manager: hotkey_manager,
-            virtual_origin: (0, 0),
+            virtual_origin,
+            physical_origin: (0, 0),
             cancel_hotkey,
             settings_hotkey,
             _tray_handle: tray_handle,
@@ -198,23 +218,52 @@ impl CrabGrabApp {
         match crate::capture::capture_all_screens() {
             Ok(data) => {
                 self.raw_image = Some(data.full_image);
-                self.virtual_origin = data.origin;
-                let tiles = utils::load_screens_as_tiles(ctx, &data.monitors);
+                self.virtual_origin = (0.0, 0.0);
+
+                // CHANGED: Do NOT use ctx.pixels_per_point() here.
+                // It is stale because the window hasn't moved yet.
+                // Use the scale factor of the monitor where the window starts.
+                let predicted_ppi = data.origin_scale_factor;
+
+                log::debug!("Using Predicted PPI: {}", predicted_ppi);
+
+                // 1. VISUALS: Pass Predicted PPI
+                let tiles = utils::load_screens_as_tiles(
+                    ctx,
+                    &data.monitors,
+                    data.physical_origin,
+                    predicted_ppi // <--- Use the value from capture data
+                );
                 self.tiles = Some(tiles);
 
-                if let Some(img) = &self.raw_image {
-                    let (w, h) = img.dimensions();
-                    ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
-                        egui::pos2(data.origin.0 as f32, data.origin.1 as f32)
-                    ));
-                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
-                        egui::vec2(w as f32, h as f32)
-                    ));
-                }
+                // 2. HITBOXES: Pass Predicted PPI
+                self.monitor_layout = data.monitors.iter().map(|m| {
+                    let phys_offset_x = (m.x - data.physical_origin.0) as f32;
+                    let phys_offset_y = (m.y - data.physical_origin.1) as f32;
+
+                    // Divide by the predicted PPI
+                    let egui_x = phys_offset_x / predicted_ppi;
+                    let egui_y = phys_offset_y / predicted_ppi;
+
+                    let egui_w = m.width as f32 / predicted_ppi;
+                    let egui_h = m.height as f32 / predicted_ppi;
+
+                    egui::Rect::from_min_size(
+                        egui::pos2(egui_x, egui_y),
+                        egui::vec2(egui_w, egui_h)
+                    )
+                }).collect();
+
+                // ... Window positioning code remains the same ...
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                    egui::pos2(data.logical_origin.0, data.logical_origin.1)
+                ));
+
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                    egui::vec2(data.logical_width, data.logical_height)
+                ));
 
                 self.state = AppState::Snapping;
-
-                // Ensure window is visible and focused
                 ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
                 ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
             }
@@ -357,7 +406,7 @@ impl CrabGrabApp {
         self.current_pos = None;
     }
 
-    fn convert_egui_to_hotkey(&self, key: egui::Key, modifiers: egui::Modifiers) -> Option<HotKey> {
+    fn convert_egui_to_hotkey(&self, _egui_key: egui::Key, modifiers: egui::Modifiers) -> Option<HotKey> {
         // 1. Convert egui::Modifiers -> global_hotkey::hotkey::Modifiers
         let mut gh_modifiers = Modifiers::empty();
 
@@ -369,10 +418,10 @@ impl CrabGrabApp {
         let gh_code = {
             macro_rules! map_letters {
                 ( $( $egui:ident => $gh:ident ),* $(,)? ) => {
-                    match key {
+                    match _egui_key {
                         $( egui::Key::$egui => Code::$gh, )*
                         _ => {
-                            log::warn!("Unsupported key: {:?}", key);
+                            log::warn!("Unsupported key: {:?}", _egui_key);
                             return None;
                         }
                     }
@@ -478,18 +527,10 @@ impl eframe::App for CrabGrabApp {
                 egui::CentralPanel::default().frame(egui::Frame::NONE).show(ctx, |ui| {
                     let draw_tiles = |painter: &egui::Painter, tint: egui::Color32| {
                         if let Some(tiles) = &self.tiles {
-                            for (global_x, global_y, texture) in tiles {
-                                let local_x = *global_x - self.virtual_origin.0 as f32;
-                                let local_y = *global_y - self.virtual_origin.1 as f32;
-
-                                let rect = egui::Rect::from_min_size(
-                                    egui::Pos2::new(local_x, local_y),
-                                    texture.size_vec2()
-                                );
-
+                            for (rect, texture) in tiles {
                                 painter.image(
                                     texture.id(),
-                                    rect,
+                                    *rect, // Rect is already in local physical coords (0,0 based)
                                     egui::Rect::from_min_max(egui::Pos2::ZERO, egui::Pos2::new(1.0, 1.0)),
                                     tint,
                                 );
@@ -566,9 +607,14 @@ impl eframe::App for CrabGrabApp {
                         );
                     }
 
-                    if let Some(texture) = &self.cursor_texture && self.config.custom_cursor {
-                        ctx.set_cursor_icon(egui::CursorIcon::None);
-                        utils::draw_custom_cursor(ui, texture);
+                    if self.config.custom_cursor {
+                        if let Some(texture) = &self.cursor_texture {
+                            ctx.set_cursor_icon(egui::CursorIcon::None);
+                            utils::draw_custom_cursor(ui, texture);
+                        } else {
+                            // Fallback if texture failed to load
+                            ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
+                        }
                     } else {
                         ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
                     }
@@ -669,3 +715,4 @@ impl eframe::App for CrabGrabApp {
         }
     }
 }
+

@@ -14,7 +14,8 @@ use crate::capture::{MonitorData};
 
 const MAX_TILE_SIZE: u32 = 2048; // Safe limit for almost any GPU
 
-pub fn load_image_as_tiles(ctx: &Context, image: &RgbaImage) -> Vec<(f32, f32, TextureHandle)> {
+// Changed: Return explicit PHYSICAL offsets and sizes (px) along with the texture handle
+pub fn load_image_as_tiles(ctx: &Context, image: &RgbaImage) -> Vec<(u32, u32, u32, u32, TextureHandle)> {
     let (total_width, total_height) = image.dimensions();
     let mut tiles = Vec::new();
 
@@ -45,8 +46,8 @@ pub fn load_image_as_tiles(ctx: &Context, image: &RgbaImage) -> Vec<(f32, f32, T
             let name = format!("tile_{}_{}_{}x{}", current_x, current_y, tile_width, tile_height);
             let handle = ctx.load_texture(&name, color_image, TextureOptions::NEAREST);
 
-            // Store X AND Y offsets
-            tiles.push((current_x as f32, current_y as f32, handle));
+            // Store physical X, Y offsets and physical tile sizes (all px)
+            tiles.push((current_x, current_y, tile_width, tile_height, handle));
 
             current_x += tile_width;
         }
@@ -57,26 +58,47 @@ pub fn load_image_as_tiles(ctx: &Context, image: &RgbaImage) -> Vec<(f32, f32, T
 }
 
 pub fn load_screens_as_tiles(
-    ctx: &egui::Context,
-    captures: &[MonitorData]
-) -> Vec<(f32, f32, egui::TextureHandle)> {
+    ctx: &Context,
+    captures: &[MonitorData],
+    physical_origin: (i32, i32), // <--- CHANGE to Physical
+    current_ppi: f32,
+) -> Vec<(egui::Rect, TextureHandle)> {
     let mut result_tiles = Vec::new();
 
     for mon in captures {
-        // 1. Tile this specific monitor's image
         let local_tiles = load_image_as_tiles(ctx, &mon.image);
 
-        // 2. Adjust offsets to Global Space
-        for (tile_x, tile_y, texture) in local_tiles {
-            // Global X = Monitor X + Tile X Offset
-            let global_x = mon.x as f32 + tile_x;
-            // Global Y = Monitor Y + Tile Y Offset
-            let global_y = mon.y as f32 + tile_y;
+        // --- THE FIX ---
+        // 1. Calculate the PHYSICAL distance from the top-left of the virtual desktop
+        let phys_offset_x = (mon.x - physical_origin.0) as f32;
+        let phys_offset_y = (mon.y - physical_origin.1) as f32;
 
-            result_tiles.push((global_x, global_y, texture));
+        // 2. Convert that Physical distance into Egui Logical Units
+        // We divide by the current PPI (e.g., 1.5) to find where to draw in the window.
+        let egui_offset_x = phys_offset_x / current_ppi;
+        let egui_offset_y = phys_offset_y / current_ppi;
+
+        // 3. Scale the content itself
+        // 1 Physical Pixel = (1.0 / PPI) Logical Units
+        let scale = 1.0 / current_ppi;
+
+        for (tile_x, tile_y, tile_w, tile_h, texture) in local_tiles {
+            // Position = MonitorStart + (TileOffset * Scale)
+            let final_x = egui_offset_x + (tile_x as f32 * scale);
+            let final_y = egui_offset_y + (tile_y as f32 * scale);
+
+            // Size = TileSize * Scale
+            let final_w = tile_w as f32 * scale;
+            let final_h = tile_h as f32 * scale;
+
+            let rect = egui::Rect::from_min_size(
+                egui::pos2(final_x, final_y),
+                egui::vec2(final_w, final_h)
+            );
+
+            result_tiles.push((rect, texture));
         }
     }
-
     result_tiles
 }
 
@@ -202,7 +224,7 @@ pub fn get_logging_config() -> Config {
             Root::builder()
                 .appender("stdout")
                 .appender("file")
-                .build(log::LevelFilter::Info),
+                .build(log::LevelFilter::Debug), // TODO: Change to Info for release
         )
         .unwrap()
 }
