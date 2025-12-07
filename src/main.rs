@@ -41,41 +41,46 @@ fn main() -> Result<(), eframe::Error> {
     // 3. WGPU Setup
     let wgpu_options = WgpuConfiguration {
         wgpu_setup: WgpuSetup::CreateNew(WgpuSetupCreateNew {
+            instance_descriptor: wgpu::InstanceDescriptor {
+                // FIX: Use DX12 on Windows for transparency, Vulkan/Metal elsewhere
+                backends: if cfg!(target_os = "windows") {
+                    wgpu::Backends::DX12
+                } else {
+                    wgpu::Backends::VULKAN | wgpu::Backends::METAL
+                },
+                ..Default::default()
+            },
+
             device_descriptor: Arc::new(|adapter| {
+                // Log what we actually got
+                log::info!("Selected Backend: {:?}", adapter.get_info().backend);
+
                 let mut limits = wgpu::Limits::default();
                 limits.max_texture_dimension_2d = 8192;
-
-                // Log the chosen adapter for debugging
-                log::info!("Selected WGPU Adapter: {:?}", adapter.get_info());
 
                 wgpu::DeviceDescriptor {
                     label: Some("CrabGrab Device"),
                     required_features: wgpu::Features::default(),
                     required_limits: limits,
-                    experimental_features: Default::default(),
-                    memory_hints: Default::default(),
-                    trace: Default::default(),
+                    ..Default::default()
                 }
             }),
-            // Use HighPerformance to ensure we get the discrete GPU (RTX 4080)
             power_preference: wgpu::PowerPreference::HighPerformance,
             ..Default::default()
         }),
 
-        // Improved Error Handler
+        // Improved Error Handler to catch "Fatal" errors cleanly
         on_surface_error: Arc::new(|err| {
-            log::warn!("WGPU Surface Error: {:?} - Attempting to recreate surface...", err);
             if let wgpu::SurfaceError::OutOfMemory = err {
-                log::error!("Fatal: Out of Video Memory!");
-                egui_wgpu::SurfaceErrorAction::SkipFrame // Don't crash, just skip
+                log::error!("Fatal: Out of VRAM!");
+                egui_wgpu::SurfaceErrorAction::SkipFrame
             } else {
+                log::warn!("Surface Error ({:?}). Recreating...", err);
                 egui_wgpu::SurfaceErrorAction::RecreateSurface
             }
         }),
 
-        // Skip vsync for lower latency screenshots? (Optional)
         present_mode: wgpu::PresentMode::AutoVsync,
-
         ..Default::default()
     };
 

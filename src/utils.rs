@@ -213,7 +213,7 @@ pub fn setup_panic_hook() {
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
         log::error!("CRASH: App panicked!");
-        if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+        if let Some(s) = panic_info.payload().downcast_ref::<String>() {
             log::error!("Panic Payload: {:?}", s);
         }
         if let Some(location) = panic_info.location() {

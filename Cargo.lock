@@ -1134,7 +1134,7 @@ dependencies = [
 
 [[package]]
 name = "crab-grab"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "arboard",
  "auto-launch",
