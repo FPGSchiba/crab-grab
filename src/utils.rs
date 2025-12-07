@@ -208,3 +208,18 @@ pub fn get_logging_config() -> Config {
         )
         .unwrap()
 }
+
+pub fn setup_panic_hook() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        log::error!("CRASH: App panicked!");
+        if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+            log::error!("Panic Payload: {:?}", s);
+        }
+        if let Some(location) = panic_info.location() {
+            log::error!("Location: {}:{}:{}", location.file(), location.line(), location.column());
+        }
+        // Call default hook to print to stderr (if console exists)
+        default_hook(panic_info);
+    }));
+}

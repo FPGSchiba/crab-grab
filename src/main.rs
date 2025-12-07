@@ -18,7 +18,10 @@ use windows::Win32::UI::WindowsAndMessaging::{GetMessageW, TranslateMessage, Dis
 fn main() -> Result<(), eframe::Error> {
     let config = utils::get_logging_config();
     let _handle = log4rs::init_config(config).unwrap();
-    log::info!("Starting Crab Grab...");
+
+    utils::setup_panic_hook();
+
+    log::info!("Starting Crab Grab v{} ...", env!("CARGO_PKG_VERSION"));
 
     // 1. Setup Common Menu Items
     let quit_id = "quit".to_string();
@@ -38,11 +41,15 @@ fn main() -> Result<(), eframe::Error> {
     // 3. WGPU Setup
     let wgpu_options = WgpuConfiguration {
         wgpu_setup: WgpuSetup::CreateNew(WgpuSetupCreateNew {
-            device_descriptor: Arc::new(|_adapter| {
+            device_descriptor: Arc::new(|adapter| {
                 let mut limits = wgpu::Limits::default();
                 limits.max_texture_dimension_2d = 8192;
+
+                // Log the chosen adapter for debugging
+                log::info!("Selected WGPU Adapter: {:?}", adapter.get_info());
+
                 wgpu::DeviceDescriptor {
-                    label: Some("CrabGrab"),
+                    label: Some("CrabGrab Device"),
                     required_features: wgpu::Features::default(),
                     required_limits: limits,
                     experimental_features: Default::default(),
@@ -50,12 +57,25 @@ fn main() -> Result<(), eframe::Error> {
                     trace: Default::default(),
                 }
             }),
+            // Use HighPerformance to ensure we get the discrete GPU (RTX 4080)
+            power_preference: wgpu::PowerPreference::HighPerformance,
             ..Default::default()
         }),
+
+        // Improved Error Handler
         on_surface_error: Arc::new(|err| {
-            log::error!("WGPU surface error: {:?}", err);
-            egui_wgpu::SurfaceErrorAction::RecreateSurface
+            log::warn!("WGPU Surface Error: {:?} - Attempting to recreate surface...", err);
+            if let wgpu::SurfaceError::OutOfMemory = err {
+                log::error!("Fatal: Out of Video Memory!");
+                egui_wgpu::SurfaceErrorAction::SkipFrame // Don't crash, just skip
+            } else {
+                egui_wgpu::SurfaceErrorAction::RecreateSurface
+            }
         }),
+
+        // Skip vsync for lower latency screenshots? (Optional)
+        present_mode: wgpu::PresentMode::AutoVsync,
+
         ..Default::default()
     };
 
