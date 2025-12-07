@@ -8,6 +8,10 @@ use tray_icon::Icon;
 use auto_launch::AutoLaunchBuilder;
 use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
+use log4rs::append::rolling_file::policy::compound::CompoundPolicy;
+use log4rs::append::rolling_file::policy::compound::roll::fixed_window::FixedWindowRoller;
+use log4rs::append::rolling_file::policy::compound::trigger::size::SizeTrigger;
+use log4rs::append::rolling_file::RollingFileAppender;
 use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
 use crate::capture::{MonitorData};
@@ -211,9 +215,16 @@ pub fn get_logging_config() -> Config {
         .encoder(Box::new(PatternEncoder::new("{d} - {l} - {m}\n")))
         .build();
 
-    let file = FileAppender::builder()
+    let policy = CompoundPolicy::new(
+        Box::new(SizeTrigger::new(10 * 1024 * 1024)),
+        Box::new(FixedWindowRoller::builder()
+            .build("crab-grab.log.{}", 5)
+            .unwrap()),
+    );
+
+    let file = RollingFileAppender::builder()
         .encoder(Box::new(PatternEncoder::new("{d} - {l} - {m}\n")))
-        .build(log_file_path)
+        .build(log_file_path, Box::new(policy))
         .unwrap();
 
     // Build the logging configuration
@@ -224,7 +235,7 @@ pub fn get_logging_config() -> Config {
             Root::builder()
                 .appender("stdout")
                 .appender("file")
-                .build(log::LevelFilter::Debug), // TODO: Change to Info for release
+                .build(log::LevelFilter::Info),
         )
         .unwrap()
 }

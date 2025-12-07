@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use global_hotkey::hotkey::{Code, HotKey, Modifiers};
-
+use crate::utils;
 // TASK: Add #[derive(Serialize, Deserialize)] macros
 // Note: 'HotKey' might not implement Serialize/Deserialize by default!
 // If it doesn't, we have a problem.
@@ -72,6 +72,7 @@ impl AppConfig {
                 if let Ok(mut config) = serde_json::from_str::<AppConfig>(&data) {
                     let snap_hotkey = savable_to_hotkey(&config.snap_hotkey_code, config.snap_hotkey_mods);
                     config.snap_hotkey = snap_hotkey;
+                    utils::set_autostart(config.run_on_startup); // Ensure autostart is set on load
                     config
                 } else {
                     log::error!("Failed to parse config file, using default config.");

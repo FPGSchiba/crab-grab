@@ -104,7 +104,7 @@ impl CrabGrabApp {
         };
 
         let (virtual_origin, _) = if let Ok(data) = crate::capture::capture_all_screens() {
-            log::info!("Warmup: Detected Origin at ({}, {}) with Scale {}",
+            log::debug!("Warmup: Detected Origin at ({}, {}) with Scale {}",
             data.logical_origin.0, data.logical_origin.1, data.origin_scale_factor);
 
             // 2. Move the hidden window to that monitor immediately.
