@@ -19,7 +19,7 @@ jobs:
       - run: cargo install cargo-wix
       - run: cargo wix --nocapture
       - name: Upload Artifact
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: target/wix/*.msi
         env:
@@ -39,7 +39,7 @@ jobs:
       - run: cargo install cargo-deb
       - run: cargo deb
       - name: Upload Artifact
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: target/debian/*.deb
         env:
@@ -57,7 +57,7 @@ jobs:
       - name: Zip Bundle
         run: zip -r crab-grab-macos.zip target/release/bundle/osx/CrabGrab.app
       - name: Upload Artifact
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: crab-grab-macos.zip
         env:
