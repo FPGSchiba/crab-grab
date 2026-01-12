@@ -9,20 +9,20 @@ authors = ["FPG Schiba <craftzockerlp@gmail.com>"]
 
 [dependencies]
 arboard = "3.6.1"
-eframe = {version =  "0.33.2", features = ["wgpu"]}
+eframe = {version =  "0.33.3", features = ["wgpu"]}
 global-hotkey = "0.7.0"
 image = "0.25.9"
-tray-icon = "0.21.2"
-xcap = "0.7.1"
+tray-icon = "0.21.3"
+xcap = "0.8.1"
 rayon = "1.8"
-rfd = "0.16.0"
+rfd = "0.17.1"
 chrono = "0.4.42"
-rodio = "0.19.0"
+rodio = "0.21.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 dirs = "6.0.0"
 egui = "0.33.2"
-auto-launch = "0.5.0"
+auto-launch = "0.6.0"
 winres = "0.1.12"
 log4rs = "1.4.0"
 log = "0.4.29"
