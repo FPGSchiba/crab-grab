@@ -15,6 +15,7 @@ use rayon::prelude::*;
 use crate::config::AppConfig;
 use crate::utils;
 use crate::audio::SoundEngine;
+use crate::capture::MonitorData;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum AppState {
@@ -28,8 +29,9 @@ pub struct CrabGrabApp {
     previous_state: AppState,
     restore_rect: Option<egui::Rect>, // Stores position/size of settings window
 
-    _hotkey_manager: GlobalHotKeyManager,
+    hotkey_manager: GlobalHotKeyManager,
     cancel_hotkey: HotKey,
+    cancel_registered: bool,
     settings_hotkey: HotKey,
 
     raw_image: Option<RgbaImage>,
@@ -39,6 +41,11 @@ pub struct CrabGrabApp {
     current_pos: Option<egui::Pos2>,
     virtual_origin: (f32, f32),
     physical_origin: (i32, i32),
+
+    // Store predicted PPI and last captured monitor data so we can re-build
+    // tiles/hitboxes once the window's actual pixels_per_point is available.
+    predicted_ppi: f32,
+    last_monitors: Option<Vec<MonitorData>>,
 
     quit_id: MenuId,
     settings_id: MenuId,
@@ -66,7 +73,7 @@ impl CrabGrabApp {
         let cancel_hotkey = HotKey::new(None, Code::Escape);
         let settings_hotkey = HotKey::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyS);
 
-        for hk in [loaded_config.snap_hotkey, cancel_hotkey, settings_hotkey] {
+        for hk in [loaded_config.snap_hotkey, settings_hotkey] {
             match hotkey_manager.register(hk) {
                 Ok(_) => log::info!("Hotkey registered: {:?}", hk),
                 Err(e) => log::error!("Failed to register hotkey {:?}: {:?}", hk, e),
@@ -130,10 +137,13 @@ impl CrabGrabApp {
             start_pos: None,
             current_pos: None,
             state: AppState::Idle,
-            _hotkey_manager: hotkey_manager,
+            hotkey_manager,
             virtual_origin,
             physical_origin: (0, 0),
+            predicted_ppi: 1.0,
+            last_monitors: None,
             cancel_hotkey,
+            cancel_registered: false,
             settings_hotkey,
             _tray_handle: tray_handle,
             quit_id,
@@ -253,6 +263,11 @@ impl CrabGrabApp {
                         egui::vec2(egui_w, egui_h)
                     )
                 }).collect();
+
+                // Save predicted PPI and monitor data so we can re-build later if needed
+                self.predicted_ppi = predicted_ppi;
+                self.last_monitors = Some(data.monitors);
+                self.physical_origin = data.physical_origin;
 
                 // ... Window positioning code remains the same ...
                 ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(
@@ -404,50 +419,14 @@ impl CrabGrabApp {
         self.restore_rect = None;
         self.start_pos = None;
         self.current_pos = None;
-    }
-
-    fn convert_egui_to_hotkey(&self, _egui_key: egui::Key, modifiers: egui::Modifiers) -> Option<HotKey> {
-        // 1. Convert egui::Modifiers -> global_hotkey::hotkey::Modifiers
-        let mut gh_modifiers = Modifiers::empty();
-
-        if modifiers.ctrl { gh_modifiers |= Modifiers::CONTROL; }
-        if modifiers.shift { gh_modifiers |= Modifiers::SHIFT; }
-        if modifiers.alt { gh_modifiers |= Modifiers::ALT; }
-
-        // 2. Convert egui::Key -> global_hotkey::hotkey::Code
-        let gh_code = {
-            macro_rules! map_letters {
-                ( $( $egui:ident => $gh:ident ),* $(,)? ) => {
-                    match _egui_key {
-                        $( egui::Key::$egui => Code::$gh, )*
-                        _ => {
-                            log::warn!("Unsupported key: {:?}", _egui_key);
-                            return None;
-                        }
-                    }
-                };
-            }
-
-            map_letters!(
-                A => KeyA, B => KeyB, C => KeyC, D => KeyD, E => KeyE, F => KeyF,
-                G => KeyG, H => KeyH, I => KeyI, J => KeyJ, K => KeyK, L => KeyL,
-                M => KeyM, N => KeyN, O => KeyO, P => KeyP, Q => KeyQ, R => KeyR,
-                S => KeyS, T => KeyT, U => KeyU, V => KeyV, W => KeyW, X => KeyX,
-                Y => KeyY, Z => KeyZ,
-                Num0 => Digit0, Num1 => Digit1, Num2 => Digit2, Num3 => Digit3,
-                Num4 => Digit4, Num5 => Digit5, Num6 => Digit6, Num7 => Digit7,
-                Num8 => Digit8, Num9 => Digit9
-            )
-        };
-
-        Some(HotKey::new(Some(gh_modifiers), gh_code))
+        self.last_monitors = None;
     }
 
     fn update_hotkey(&mut self, new_hotkey: HotKey) {
         log::debug!("Updating hotkey to: {:?}", new_hotkey);
 
         // 1. Unregister the OLD hotkey (self.config.snap_hotkey)
-        let result = self._hotkey_manager.unregister(self.config.snap_hotkey);
+        let result = self.hotkey_manager.unregister(self.config.snap_hotkey);
         // Hint: self.hotkey_manager.unregister(self.config.snap_hotkey)
 
         if let Err(e) = result {
@@ -457,11 +436,11 @@ impl CrabGrabApp {
 
         // 2. Register the NEW hotkey
         // Hint: self.hotkey_manager.register(new_hotkey)
-        let result = self._hotkey_manager.register(new_hotkey);
+        let result = self.hotkey_manager.register(new_hotkey);
         if let Err(e) = result {
             log::error!("Failed to register new hotkey {:?}: {:?}", new_hotkey, e);
             // Attempt to restore the previous hotkey; log any failure but don't panic.
-            if let Err(e2) = self._hotkey_manager.register(self.config.snap_hotkey) {
+            if let Err(e2) = self.hotkey_manager.register(self.config.snap_hotkey) {
                 log::error!("Failed to restore previous hotkey {:?}: {:?}", self.config.snap_hotkey, e2);
             }
             return;
@@ -506,6 +485,24 @@ impl CrabGrabApp {
             }
         }
     }
+
+    fn handle_hotkey_activation(&mut self) {
+        if self.state == AppState::Snapping {
+            if !self.cancel_registered {
+                 match self.hotkey_manager.register(self.cancel_hotkey) {
+                     Err(err) => log::error!("Failed to register cancel hotkey: {:?}", err),
+                     Ok(_) => self.cancel_registered = true,
+                 }
+            }
+        } else{
+            if self.cancel_registered {
+                match self.hotkey_manager.unregister(self.cancel_hotkey) {
+                    Err(err) => log::error!("Failed to unregister cancel hotkey: {:?}", err),
+                    Ok(_) => self.cancel_registered = false,
+                }
+            }
+        }
+    }
 }
 
 impl eframe::App for CrabGrabApp {
@@ -513,6 +510,7 @@ impl eframe::App for CrabGrabApp {
         self.handle_tray_events(ctx);
         self.handle_hotkey_events(ctx);
         self.check_file_picker_result();
+        self.handle_hotkey_activation();
 
         // --- Drawing Logic ---
         match self.state {
@@ -522,6 +520,43 @@ impl eframe::App for CrabGrabApp {
                 ctx.request_repaint_after(Duration::from_millis(100));
             }
             AppState::Snapping => {
+                // Check whether the window's actual pixels_per_point has been negotiated.
+                // If it differs from our predicted PPI, rebuild tiles and hitboxes.
+                let actual_ppi = ctx.pixels_per_point();
+                if (actual_ppi - self.predicted_ppi).abs() > 0.001 {
+                    if let Some(monitors) = &self.last_monitors {
+                        log::debug!("Detected actual PPI {} differs from predicted {}. Rebuilding tiles.", actual_ppi, self.predicted_ppi);
+                        // Rebuild tiles using the actual PPI
+                        let tiles = utils::load_screens_as_tiles(
+                            ctx,
+                            monitors,
+                            self.physical_origin,
+                            actual_ppi,
+                        );
+                        self.tiles = Some(tiles);
+
+                        // Rebuild monitor_layout hitboxes
+                        self.monitor_layout = monitors.iter().map(|m| {
+                            let phys_offset_x = (m.x - self.physical_origin.0) as f32;
+                            let phys_offset_y = (m.y - self.physical_origin.1) as f32;
+
+                            let egui_x = phys_offset_x / actual_ppi;
+                            let egui_y = phys_offset_y / actual_ppi;
+
+                            let egui_w = m.width as f32 / actual_ppi;
+                            let egui_h = m.height as f32 / actual_ppi;
+
+                            egui::Rect::from_min_size(
+                                egui::pos2(egui_x, egui_y),
+                                egui::vec2(egui_w, egui_h)
+                            )
+                        }).collect();
+
+                        // Update predicted_ppi so we don't rebuild repeatedly
+                        self.predicted_ppi = actual_ppi;
+                    }
+                }
+
                 let mut finish_capture: Option<(egui::Rect, egui::Vec2)> = None;
 
                 egui::CentralPanel::default().frame(egui::Frame::NONE).show(ctx, |ui| {
@@ -693,7 +728,7 @@ impl eframe::App for CrabGrabApp {
                             }
 
                             for key in input.keys_down {
-                                if let Some(new_hotkey) = self.convert_egui_to_hotkey(key, input.modifiers) {
+                                if let Some(new_hotkey) = utils::convert_egui_to_hotkey(key, input.modifiers) {
                                     self.update_hotkey(new_hotkey);
                                     self.is_recording_hotkey = false;
                                     break;

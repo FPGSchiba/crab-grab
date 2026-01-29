@@ -1,3 +1,4 @@
+use global_hotkey::hotkey::Code;
 use std::env;
 use std::path::Path;
 use eframe::egui::{Context, TextureHandle, TextureOptions};
@@ -5,9 +6,8 @@ use egui::{vec2};
 use global_hotkey::hotkey::{HotKey, Modifiers};
 use image::RgbaImage;
 use tray_icon::Icon;
-use auto_launch::AutoLaunchBuilder;
+use auto_launch::{AutoLaunchBuilder, MacOSLaunchMode};
 use log4rs::append::console::ConsoleAppender;
-use log4rs::append::file::FileAppender;
 use log4rs::append::rolling_file::policy::compound::CompoundPolicy;
 use log4rs::append::rolling_file::policy::compound::roll::fixed_window::FixedWindowRoller;
 use log4rs::append::rolling_file::policy::compound::trigger::size::SizeTrigger;
@@ -190,7 +190,7 @@ pub fn set_autostart(enable: bool) {
         let auto = AutoLaunchBuilder::new()
             .set_app_name("CrabGrab")
             .set_app_path(current_exe_str)
-            .set_use_launch_agent(true) // For macOS
+            .set_macos_launch_mode(MacOSLaunchMode::SMAppService) // For macOS
             .build();
 
         if let Ok(auto) = auto {
@@ -253,4 +253,41 @@ pub fn setup_panic_hook() {
         // Call default hook to print to stderr (if console exists)
         default_hook(panic_info);
     }));
+}
+
+pub fn convert_egui_to_hotkey(_egui_key: egui::Key, modifiers: egui::Modifiers) -> Option<HotKey> {
+    // 1. Convert egui::Modifiers -> global_hotkey::hotkey::Modifiers
+    let mut gh_modifiers = Modifiers::empty();
+
+    if modifiers.ctrl { gh_modifiers |= Modifiers::CONTROL; }
+    if modifiers.shift { gh_modifiers |= Modifiers::SHIFT; }
+    if modifiers.alt { gh_modifiers |= Modifiers::ALT; }
+
+    // 2. Convert egui::Key -> global_hotkey::hotkey::Code
+    let gh_code = {
+        macro_rules! map_letters {
+                ( $( $egui:ident => $gh:ident ),* $(,)? ) => {
+                    match _egui_key {
+                        $( egui::Key::$egui => Code::$gh, )*
+                        _ => {
+                            log::warn!("Unsupported key: {:?}", _egui_key);
+                            return None;
+                        }
+                    }
+                };
+            }
+
+        map_letters!(
+                A => KeyA, B => KeyB, C => KeyC, D => KeyD, E => KeyE, F => KeyF,
+                G => KeyG, H => KeyH, I => KeyI, J => KeyJ, K => KeyK, L => KeyL,
+                M => KeyM, N => KeyN, O => KeyO, P => KeyP, Q => KeyQ, R => KeyR,
+                S => KeyS, T => KeyT, U => KeyU, V => KeyV, W => KeyW, X => KeyX,
+                Y => KeyY, Z => KeyZ,
+                Num0 => Digit0, Num1 => Digit1, Num2 => Digit2, Num3 => Digit3,
+                Num4 => Digit4, Num5 => Digit5, Num6 => Digit6, Num7 => Digit7,
+                Num8 => Digit8, Num9 => Digit9
+            )
+    };
+
+    Some(HotKey::new(Some(gh_modifiers), gh_code))
 }

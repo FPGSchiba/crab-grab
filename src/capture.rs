@@ -67,14 +67,6 @@ pub fn capture_all_screens() -> Result<CaptureData, Box<dyn Error>> {
         max_phys_y = max_phys_y.max(mon.y + mon.height as i32);
     }
 
-    let mut origin_scale_factor = 1.0;
-    for mon in &captures {
-        if mon.x == min_phys_x && mon.y == min_phys_y {
-            origin_scale_factor = mon.scale_factor;
-            break;
-        }
-    }
-
     let total_phys_w = (max_phys_x - min_phys_x) as u32;
     let total_phys_h = (max_phys_y - min_phys_y) as u32;
 
@@ -82,7 +74,9 @@ pub fn capture_all_screens() -> Result<CaptureData, Box<dyn Error>> {
         min_phys_x, min_phys_y, total_phys_w, total_phys_h);
 
     // --- 2. CALCULATE LOGICAL BOUNDS (For OS Window positioning) ---
-    // We must respect the scale factor for the Window Manager
+    // We briefly compute per-monitor logical bounds for debug, but final logical
+    // origin/size will be derived from the chosen origin_scale_factor so that
+    // the window logical size matches the scale used to draw the physical image.
     let mut min_log_x = f32::MAX;
     let mut min_log_y = f32::MAX;
     let mut max_log_x = f32::MIN;
@@ -103,8 +97,45 @@ pub fn capture_all_screens() -> Result<CaptureData, Box<dyn Error>> {
         max_log_y = max_log_y.max(log_y + log_h);
     }
 
-    log::debug!("Bounds Logical: Origin=({}, {}), Size={}x{}",
+    log::debug!("Bounds Logical (per-monitor): Origin=({}, {}), Size={}x{}",
         min_log_x, min_log_y, max_log_x - min_log_x, max_log_y - min_log_y);
+
+    // Determine which monitor's scale should be used as the origin scale factor.
+    // Prefer a monitor that maps to the per-monitor logical origin; if none match
+    // (due to rounding/odd layouts), fall back to the monitor at the top-left
+    // physical origin (previous behavior).
+    let mut origin_scale_factor = 1.0_f32;
+    let epsilon = 0.001_f32;
+    let mut found = false;
+    for mon in &captures {
+        let mon_log_x = mon.x as f32 / mon.scale_factor;
+        let mon_log_y = mon.y as f32 / mon.scale_factor;
+        if (mon_log_x - min_log_x).abs() < epsilon && (mon_log_y - min_log_y).abs() < epsilon {
+            origin_scale_factor = mon.scale_factor;
+            found = true;
+            break;
+        }
+    }
+
+    if !found {
+        // Fallback to previous physical-based selection
+        for mon in &captures {
+            if mon.x == min_phys_x && mon.y == min_phys_y {
+                origin_scale_factor = mon.scale_factor;
+                break;
+            }
+        }
+    }
+
+    // Final logical origin and size use the chosen origin_scale_factor so that the
+    // window's logical inner size equals physical size divided by the window's PPI.
+    let logical_origin_x = min_phys_x as f32 / origin_scale_factor;
+    let logical_origin_y = min_phys_y as f32 / origin_scale_factor;
+    let logical_w = total_phys_w as f32 / origin_scale_factor;
+    let logical_h = total_phys_h as f32 / origin_scale_factor;
+
+    log::debug!("Bounds Logical (final): Origin=({}, {}), Size={}x{} (using PPI={})",
+        logical_origin_x, logical_origin_y, logical_w, logical_h, origin_scale_factor);
 
     // --- 3. STITCH FULL IMAGE ---
     let mut full_image = RgbaImage::new(total_phys_w, total_phys_h);
@@ -124,9 +155,9 @@ pub fn capture_all_screens() -> Result<CaptureData, Box<dyn Error>> {
     Ok(CaptureData {
         monitors: captures,
         full_image,
-        logical_origin: (min_log_x, min_log_y),
-        logical_width: max_log_x - min_log_x,
-        logical_height: max_log_y - min_log_y,
+        logical_origin: (logical_origin_x, logical_origin_y),
+        logical_width: logical_w,
+        logical_height: logical_h,
         origin_scale_factor,
         physical_origin: (min_phys_x, min_phys_y),
         physical_width: total_phys_w,

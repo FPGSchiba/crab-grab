@@ -1,9 +1,8 @@
 use std::io::Cursor;
-use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink};
+use rodio::{Decoder, OutputStream, OutputStreamBuilder, Sink};
 
 pub struct SoundEngine {
     _stream: OutputStream,
-    stream_handle: OutputStreamHandle,
 
     // Store two sounds now
     shutter_data: Vec<u8>,
@@ -12,7 +11,8 @@ pub struct SoundEngine {
 
 impl SoundEngine {
     pub fn new() -> Self {
-        let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+        // Open the default output stream using the builder API
+        let stream = OutputStreamBuilder::open_default_stream().unwrap();
 
         // Load BOTH sounds at compile time
         // Make sure you have 'assets/activate.wav'
@@ -22,8 +22,7 @@ impl SoundEngine {
         let activate_data = include_bytes!("assets/activate.wav").to_vec();
 
         Self {
-            _stream,
-            stream_handle,
+            _stream: stream,
             shutter_data,
             activate_data,
         }
@@ -31,12 +30,12 @@ impl SoundEngine {
 
     /// Helper to play raw data
     fn play(&self, data: &[u8]) {
-        if let Ok(sink) = Sink::try_new(&self.stream_handle) {
-            let cursor = Cursor::new(data.to_vec()); // Clone the data for playback
-            if let Ok(source) = Decoder::new(cursor) {
-                sink.append(source);
-                sink.detach();
-            }
+        // Create a Sink connected to the stream's mixer
+        let sink = Sink::connect_new(&self._stream.mixer());
+        let cursor = Cursor::new(data.to_vec()); // Clone the data for playback
+        if let Ok(source) = Decoder::try_from(cursor) {
+            sink.append(source);
+            sink.detach();
         }
     }
 

@@ -1,6 +1,6 @@
 [package]
 name = "crab-grab"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 description = "A screen capture tool with global hotkey support."
 repository = "https://github.com/FPGSchiba/crab-grab"
