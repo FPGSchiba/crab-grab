@@ -13,10 +13,10 @@ eframe = {version =  "0.33.3", features = ["wgpu"]}
 global-hotkey = "0.7.0"
 image = "0.25.9"
 tray-icon = "0.21.3"
-xcap = "0.8.2"
+xcap = "0.8.3"
 rayon = "1.8"
 rfd = "0.17.2"
-chrono = "0.4.43"
+chrono = "0.4.44"
 rodio = "0.22.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
